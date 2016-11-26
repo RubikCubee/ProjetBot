@@ -286,6 +286,7 @@ public class HunterBot extends UT2004BotModuleController<UT2004Bot>
     }
     
     //-------------------------- STATE -------------------------------// 
+    
     // ---- STATE IDDLE 
     private void stateIdle()
     {
@@ -301,17 +302,15 @@ public class HunterBot extends UT2004BotModuleController<UT2004Bot>
         else if (isDead)
         {
             currentState = State.DEAD;
-        }
-        
+        }        
          // Remise à zéro des variables 
         isHurt = false;
         isDead = false; 
         hasKilled = false;
-        timer = 0;
-        
+        timer = 0;        
         
         // Action de l'état
-        stateRunAroundItems();
+        navigate();
         sayGlobal("LA LA LA LA !! JE IDLE !!!!");
     }
     
@@ -454,7 +453,63 @@ public class HunterBot extends UT2004BotModuleController<UT2004Bot>
     	log.info(msg);
     }
     
-    
+    // Gestion de la navigation de Botanous
+    protected List<Item> itemsToRunAround = null;
+
+    protected void navigate()
+    {
+        // Si le bot est déjà en train de bouger
+        if (navigation.isNavigatingToItem()) return;
+
+        // Liste des items interessants
+        List<Item> interesting = new ArrayList<Item>();
+
+        // Parcours des armes 
+        for (ItemType itemType : ItemType.Category.WEAPON.getTypes()) 
+        {
+                // S'il n'a pas rechargé son arme 
+                if (!weaponry.hasLoadedWeapon(itemType))
+                {
+                    // Ajout de ces armes à la liste des objects interessants
+                    interesting.addAll(items.getSpawnedItems(itemType).values());
+                }
+        }
+
+        // Parcours des armures
+        for (ItemType itemType : ItemType.Category.ARMOR.getTypes()) 
+        {
+             interesting.addAll(items.getSpawnedItems(itemType).values());
+        }            
+
+        // Ajout des items de type adrénaline
+        interesting.addAll(items.getSpawnedItems(UT2004ItemType.U_DAMAGE_PACK).values());
+
+
+        // Parcours des objets de santé si blessé
+        if (info.getHealth() < 100) 
+        {                
+             interesting.addAll(items.getSpawnedItems(UT2004ItemType.HEALTH_PACK).values());
+        }
+
+        // On choisit un item aléatoire dans la liste des items intéressants
+        Item item = MyCollections.getRandom(tabooItems.filter(interesting));
+        
+        // Si jamais il n'y a pas d'item interessant
+        if (item == null) 
+        {                
+                log.info("[IDLE] Pas d'objet intéressant trouvé");
+                if (navigation.isNavigating()) return;
+                
+                // On choisit un point aléatoire
+                navigation.navigate(navPoints.getRandomNavPoint());
+        } 
+        else 
+        {
+                this.item = item;
+                log.info("Je vais prendre --> " + item.getType().getName());
+                navigation.navigate(item);        	
+        }        
+    }    
     
     // ---- Fin de la gestion de Botanous personnelle
     
@@ -576,45 +631,7 @@ public class HunterBot extends UT2004BotModuleController<UT2004Bot>
     ////////////////////////////
     // STATE RUN AROUND ITEMS //
     ////////////////////////////
-    protected List<Item> itemsToRunAround = null;
-
-    protected void stateRunAroundItems() {
-        //log.info("Decision is: ITEMS");
-        //config.setName("Hunter [ITEMS]");
-        if (navigation.isNavigatingToItem()) return;
-        
-        List<Item> interesting = new ArrayList<Item>();
-        
-        // ADD WEAPONS
-        for (ItemType itemType : ItemType.Category.WEAPON.getTypes()) 
-        {
-        	if (!weaponry.hasLoadedWeapon(itemType)) interesting.addAll(items.getSpawnedItems(itemType).values());
-        }
-        // ADD ARMORS
-        for (ItemType itemType : ItemType.Category.ARMOR.getTypes()) 
-        {
-        	interesting.addAll(items.getSpawnedItems(itemType).values());
-        }
-        // ADD QUADS
-        interesting.addAll(items.getSpawnedItems(UT2004ItemType.U_DAMAGE_PACK).values());
-        // ADD HEALTHS
-        if (info.getHealth() < 100) {
-        	interesting.addAll(items.getSpawnedItems(UT2004ItemType.HEALTH_PACK).values());
-        }
-        
-        Item item = MyCollections.getRandom(tabooItems.filter(interesting));
-        if (item == null) {
-        	log.warning("NO ITEM TO RUN FOR!");
-        	if (navigation.isNavigating()) return;
-        	bot.getBotName().setInfo("RANDOM NAV");
-        	navigation.navigate(navPoints.getRandomNavPoint());
-        } else {
-        	this.item = item;
-        	log.info("RUNNING FOR: " + item.getType().getName());
-        	bot.getBotName().setInfo("ITEM: " + item.getType().getName() + "");
-        	navigation.navigate(item);        	
-        }        
-    }
+   
 
     ////////////////
     // BOT KILLED //
