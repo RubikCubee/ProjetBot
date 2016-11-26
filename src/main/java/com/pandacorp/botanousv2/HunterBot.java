@@ -205,7 +205,7 @@ public class HunterBot extends UT2004BotModuleController<UT2004Bot>
     // Si Botanous blesse un joueur
     @EventListener(eventClass=PlayerDamaged.class)
     public void playerDamaged(PlayerDamaged event) 
-    {
+    {             
     	log.info("I have just hurt other bot for: " + event.getDamageType() + "[" + event.getDamage() + "]");
     }
     
@@ -302,12 +302,14 @@ public class HunterBot extends UT2004BotModuleController<UT2004Bot>
         else if (isDead)
         {
             currentState = State.DEAD;
-        }        
+        }     
+        
          // Remise à zéro des variables 
         isHurt = false;
         isDead = false; 
         hasKilled = false;
         timer = 0;        
+        
         
         // Action de l'état
         navigate();
@@ -358,9 +360,9 @@ public class HunterBot extends UT2004BotModuleController<UT2004Bot>
             }
 
             // 3) if enemy is far or not visible - run to him
-            int decentDistance = Math.round(random.nextFloat() * 800) + 200;
-            
-            if (!enemy.isVisible() || !shooting || decentDistance < distance) 
+            //int decentDistance = Math.round(random.nextFloat() * 800) + 200;
+            //|| decentDistance < distance
+            if (!enemy.isVisible() || !shooting) 
             {
                 if (!runningToPlayer) 
                 {
@@ -389,24 +391,33 @@ public class HunterBot extends UT2004BotModuleController<UT2004Bot>
         // Transistion & Action     
         if(!losesInterest)
         {
-            timer++;
-            if(enemy != null)
-            {
-                sayGlobal("[" + timer + "]" + " Petit, Petit, Petit... Viens vois papa " + enemy.getName());
-            }
-            else sayGlobal("[" + timer + "]" + " Ohé ? ");
+            timer++;          
+            sayGlobal("[" + timer + "]" + " Ohé ? ");
           
-            // Si on a un enemy plus proche
+            // Si il n'y a personne
             if (enemy == null || !enemy.isVisible()) 
             {
-                // On prends un nouvel enemy
+                // On arrête de tirer
+                if (info.isShooting() || info.isSecondaryShooting()) 
+                {                    
+                    getAct().act(new StopShooting());
+                }
+                
+                // On cherche un nouvel enemy
                 enemy = players.getNearestVisiblePlayer(players.getVisibleEnemies().values());
+                
+                // Si il y a quelqu'un, on l'attaque
                 if (enemy != null) 
                 {
                    currentState = State.ATTACK;
-                }                
+                }
+                else
+                {
+                    // On cherche le dernier ennemi vu
+                    navigation.navigate(lastEnemy);                    
+                }
             }
-        }
+        }        
         else if (hasKilled || losesInterest)
         {
            timer = 0;
@@ -506,11 +517,18 @@ public class HunterBot extends UT2004BotModuleController<UT2004Bot>
         else 
         {
                 this.item = item;
-                log.info("Je vais prendre --> " + item.getType().getName());
+                log.info("[IDLE] Je vais prendre --> " + item.getType().getName());
                 navigation.navigate(item);        	
         }        
     }    
     
+    
+    @Override
+    public void botKilled(BotKilled event) 
+    {
+    	isDead = true;
+        //reset();
+    }
     // ---- Fin de la gestion de Botanous personnelle
     
     
@@ -530,39 +548,16 @@ public class HunterBot extends UT2004BotModuleController<UT2004Bot>
         //config.setName("Hunter [ENGAGE]");
 
         boolean shooting = false;
-        double distance = Double.MAX_VALUE;
-        pursueCount = 0;
+       // double distance = Double.MAX_VALUE;
 
-        // 1) pick new enemy if the old one has been lost
-        if (enemy == null || !enemy.isVisible()) {
-            // pick new enemy
-            enemy = players.getNearestVisiblePlayer(players.getVisibleEnemies().values());
-            if (enemy == null) {
-                log.info("Can't see any enemies... ???");
-                return;
-            }
-        }
-
-        // 2) stop shooting if enemy is not visible
-        if (!enemy.isVisible()) {
-	        if (info.isShooting() || info.isSecondaryShooting()) {
-                // stop shooting
-                getAct().act(new StopShooting());
-            }
-            runningToPlayer = false;
-        } else {
-        	// 2) or shoot on enemy if it is visible
-	        distance = info.getLocation().getDistance(enemy.getLocation());
-	        if (shoot.shoot(weaponPrefs, enemy) != null) {
-	            log.info("Shooting at enemy!!!");
-	            shooting = true;
-	        }
-        }
-
+      
         // 3) if enemy is far or not visible - run to him
-        int decentDistance = Math.round(random.nextFloat() * 800) + 200;
-        if (!enemy.isVisible() || !shooting || decentDistance < distance) {
-            if (!runningToPlayer) {
+       // int decentDistance = Math.round(random.nextFloat() * 800) + 200;
+        //  || decentDistance < distance
+        if (!enemy.isVisible() || !shooting) 
+        {            
+            if (!runningToPlayer) 
+            {
                 navigation.navigate(enemy);
                 runningToPlayer = true;
             }
@@ -588,31 +583,6 @@ public class HunterBot extends UT2004BotModuleController<UT2004Bot>
     }
 
     //////////////////
-    // STATE PURSUE //
-    //////////////////
-    /**
-     * State pursue is for pursuing enemy who was for example lost behind a
-     * corner. How it works?: <ol> <li> initialize properties <li> obtain path
-     * to the enemy <li> follow the path - if it reaches the end - set lastEnemy
-     * to null - bot would have seen him before or lost him once for all </ol>
-     */
-    protected void statePursue() {
-        //log.info("Decision is: PURSUE");
-        ++pursueCount;
-        if (pursueCount > 30) {
-            reset();
-        }
-        if (enemy != null) {
-        	bot.getBotName().setInfo("PURSUE");
-        	navigation.navigate(enemy);
-        	item = null;
-        } else {
-        	reset();
-        }
-    }
-    protected int pursueCount = 0;
-
-    //////////////////
     // STATE MEDKIT //
     //////////////////
     protected void stateMedKit() {
@@ -620,27 +590,15 @@ public class HunterBot extends UT2004BotModuleController<UT2004Bot>
         Item item = items.getPathNearestSpawnedItem(ItemType.Category.HEALTH);
         if (item == null) {
         	log.warning("NO HEALTH ITEM TO RUN TO => ITEMS");
-        	stateRunAroundItems();
+        	//stateRunAroundItems();
         } else {
         	bot.getBotName().setInfo("MEDKIT");
         	navigation.navigate(item);
         	this.item = item;
         }
     }
-
-    ////////////////////////////
-    // STATE RUN AROUND ITEMS //
-    ////////////////////////////
    
-
-    ////////////////
-    // BOT KILLED //
-    ////////////////
-    @Override
-    public void botKilled(BotKilled event) {
-    	isDead = true;
-        //reset();
-    }
+   
 
     ///////////////////////////////////
     public static void main(String args[]) throws PogamutException {
