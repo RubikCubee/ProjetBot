@@ -453,6 +453,12 @@ public class HunterBot extends UT2004BotModuleController<UT2004Bot>
     	// And user log as well
     	log.info(msg);
     }
+    
+    
+    
+    // ---- Fin de la gestion de Botanous personnelle
+    
+    
     //////////////////
     // STATE ENGAGE //
     //////////////////
